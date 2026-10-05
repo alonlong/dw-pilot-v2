@@ -1,0 +1,184 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "24"
+
+jobs:
+  go:
+    name: go
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://ci:ci@localhost:5432/test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # 只检查 ./api 和 ./daily：根目录的 ./... 会扫到 web/node_modules 里的 Go 包。
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l ./api ./daily)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件需要 gofmt：" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./api/... ./daily/...
+      - name: go test
+        run: go test ./api/... ./daily/...
+
+  web:
+    name: web
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm test
+      - run: npm run build
+
+  migrations:
+    name: migrations
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: empty
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d empty"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build
+        run: go build -o bin/ ./api/cmd/server ./api/cmd/tenant
+      - name: 空库迁移 + tenant reset 两次比较
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/empty?sslmode=disable
+          BIN: bin
+        run: .github/scripts/check-migrations.sh
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-24.04
+    env:
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      E2E_BASE_URL: http://localhost:8080
+      E2E_TENANT: dlpv1
+      # 与 docker-compose.yml 里 TENANT_TEST_PASSWORD 的默认值相同，只用于 CI 和本地。
+      E2E_PASSWORD: pilot-pass
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose up
+        run: |
+          docker compose up -d --build
+          for _ in $(seq 1 60); do
+            curl -fsS http://localhost:8080/healthz && exit 0
+            sleep 1
+          done
+          docker compose logs
+          exit 1
+      # 与平台预览槽位相同的方式重置数据：用同一个镜像执行 tenant reset。
+      - name: tenant reset dlpv1
+        run: docker compose run --rm --no-deps -e TENANT_TEST_PASSWORD="$E2E_PASSWORD" app tenant reset -tenant dlpv1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: npm ci
+        working-directory: e2e
+        run: npm ci
+      - name: install chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: playwright
+        working-directory: e2e
+        run: npx playwright test --reporter=list,html
+      - name: compose logs
+        if: failure()
+        run: docker compose logs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+      - name: docker compose down
+        if: always()
+        run: docker compose down -v
+
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      # 只有 dw/* 分支的 PR 推送到 GHCR。
+      PUSH: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'dw/') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.HEAD_SHA }}
+      - name: image name
+        # GHCR 的镜像名必须小写。
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: env.PUSH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: BUILD_SHA=${{ env.HEAD_SHA }}
+          tags: ${{ env.IMAGE }}:sha-${{ env.HEAD_SHA }}
+          push: ${{ env.PUSH == 'true' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

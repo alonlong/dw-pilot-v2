@@ -1,0 +1,4 @@
+# 受保护测试（e2e/）由 QA 评审；目前只有仓库 owner 一人，先写 owner。
+/e2e/ @alonlong
+# 设计系统组件需 UX 确认（docs/design.md 第 10 节）。
+/web/src/ui/ @alonlong
