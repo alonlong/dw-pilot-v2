@@ -2,7 +2,7 @@
 
 施工日报试点项目：Go API + Postgres（schema-per-tenant）+ React SPA。设计见 [`docs/design.md`](docs/design.md)，接口契约见 [`docs/api.md`](docs/api.md)。
 
-业务规则只在 `daily/`（纯函数，时间由调用方传入）；`api/` 负责存储、登录与权限、HTTP 接口和租户命令。
+业务规则只在 `daily/`（纯函数，时间由调用方传入）；`api/` 负责存储、登录与权限、HTTP 接口和租户命令。给编码 Agent 的规则见 [`AGENTS.md`](AGENTS.md)。
 
 ## 目录
 
@@ -19,11 +19,47 @@ api/internal/httpapi/   路由与处理函数
 api/internal/tenant/    快照读取与校验、租户建删
 api/migrations/         Goose SQL 迁移（public/、tenant/，内嵌进二进制）
 api/testdata/golden/    虚构的 Golden 快照
+web/                    React SPA 与设计系统（web/src/ui/）
+e2e/                    Playwright 冒烟测试
+Dockerfile              镜像：server、tenant、devseed + 前端 + Golden 快照
+docker-compose.yml      本地：postgres + app
 ```
 
-## 本地运行
+## 用 docker compose 运行
 
-需要 Go 1.25+ 和 Postgres 16。
+```sh
+docker compose up --build
+```
+
+打开 <http://localhost:8080>，用下面任一账号登录，密码 `pilot-pass`（`TENANT_TEST_PASSWORD` 的默认值，只用于本地）：
+
+| 账号 | 角色 |
+|---|---|
+| `admin@dev.test` | 管理员 |
+| `manager@dev.test` | 项目经理 |
+| `field@dev.test` | 现场 |
+| `finance@dev.test` | 财务 |
+
+- 每次 `up` 时一次性服务 `init` 执行 `devseed -reset`，按 Golden 快照重建 `dev` 租户，之前的改动会丢掉。
+- 8080 被占用时换端口：`APP_PORT=18080 docker compose up --build`。
+- 换密码：`TENANT_TEST_PASSWORD=… docker compose up --build`。
+- 在同一个库里建预览槽位（与平台的重置方式相同）：
+
+  ```sh
+  docker compose run --rm --no-deps -e TENANT_TEST_PASSWORD=pilot-pass app tenant reset -tenant dlpv1
+  ```
+
+## 镜像
+
+```sh
+docker build --build-arg BUILD_SHA=$(git rev-parse HEAD) -t dw-pilot-v2 .
+```
+
+运行镜像是 distroless（非 root，无 shell），`server`、`tenant`、`devseed` 都在 PATH 里，只设 `CMD ["server"]`，所以 `docker run <镜像> tenant reset -tenant dlpv1` 直接调用租户命令。镜像里 `WEB_DIR=/app/web`、`TENANT_SNAPSHOT=/app/golden`（Golden 快照随镜像发布），`BUILD_SHA` 来自构建参数。
+
+## 不用 Docker 本地运行
+
+需要 Go 1.25+、Node 24 和 Postgres 16。
 
 1. 起一个 Postgres（任选其一）：
 
@@ -49,8 +85,11 @@ api/testdata/golden/    虚构的 Golden 快照
 
    ```sh
    go run ./api/cmd/server                       # 只提供 /api
+   (cd web && npm ci && npm run build)
    WEB_DIR=web/dist go run ./api/cmd/server      # 同时提供前端构建产物
    ```
+
+   前端开发也可以 `cd web && npm run dev`（Vite 把 `/api` 代理到 `API_TARGET`，默认 `http://localhost:8080`）。
 
 4. 试一下：
 
@@ -107,10 +146,49 @@ go test ./api/internal/tenant -run TestGoldenManifest -update
 
 ## 检查
 
+与 CI（`.github/workflows/ci.yml`）一致。Go 只检查 `./api` 和 `./daily`：根目录的 `./...` 会扫到 `web/node_modules` 里的 Go 包。
+
 ```sh
-gofmt -l .
-go vet ./...
-TEST_DATABASE_URL='postgres://…/空库?sslmode=disable' go test ./...
+gofmt -l ./api ./daily                       # 必须没有输出
+go vet ./api/... ./daily/...
+TEST_DATABASE_URL='postgres://…/空库?sslmode=disable' go test ./api/... ./daily/...
+
+cd web && npm ci && npm run lint && npm run type-check && npm test && npm run build
 ```
 
 需要数据库的测试会在 `TEST_DATABASE_URL` 指向的库里建删 `dlpv9xx` 槽位，请用专门的空库。
+
+迁移检查（CI 的 `migrations` 任务）：在空库上起 server 跑 public 迁移，`tenant reset` 两次并比较结构与数据，再重启 server 读台账。
+
+```sh
+go build -o bin/ ./api/cmd/server ./api/cmd/tenant
+DATABASE_URL='postgres://…/空库?sslmode=disable' .github/scripts/check-migrations.sh
+```
+
+## E2E
+
+`e2e/` 下的 Playwright 冒烟测试（测试名带 `SMOKE-n`），对已经起好的服务跑，不自己启动服务：
+
+```sh
+cd e2e
+npm ci
+npx playwright install chromium
+
+# 对 docker compose（dev 租户）
+E2E_TENANT=dev E2E_PASSWORD=pilot-pass npx playwright test
+
+# 对预览槽位 dlpv1（默认租户），例如先执行上面的 tenant reset
+E2E_PASSWORD=pilot-pass npx playwright test
+```
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `E2E_BASE_URL` | `http://localhost:8080` | 被测服务地址 |
+| `E2E_TENANT` | `dlpv1` | 测试账号的租户，账号为 `<role>@<E2E_TENANT>.test` |
+| `E2E_PASSWORD` | 无（必填） | 测试账号密码，即 `TENANT_TEST_PASSWORD` |
+
+写操作的用例（新建、提交、锁定）每次在 2100 年以后的随机业务日期新建自己的日报，不改快照里的日报，所以可以对同一个租户重复运行；台账用例只看快照的日期范围（2026-09-01 至 09-10）。报告格式用 `--reporter` 指定，CI 里是 `--reporter=list,html`，失败时上传 trace 和 HTML 报告。
+
+## CI
+
+`.github/workflows/ci.yml`：`go`、`web`、`migrations`、`e2e`（docker compose + `tenant reset dlpv1` + Playwright）、`image`（构建镜像；`dw/*` 分支的 PR 推送到 `ghcr.io/<owner>/<repo>:sha-<PR head>`）。

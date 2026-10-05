@@ -38,7 +38,7 @@ dw-pilot-v2/
 ├── AGENTS.md                 # 给编码 Agent 的规则（第 9 节）
 ├── README.md
 ├── go.mod                    # module example.com/dailylog（沿用，daily 包导入路径不变）
-├── Dockerfile                # 一个镜像：server + tenant 两个命令 + 前端构建产物
+├── Dockerfile                # 一个镜像：server、tenant、devseed 三个命令 + 前端构建产物 + Golden 快照
 ├── docker-compose.yml        # 本地开发：postgres + app
 ├── daily/                    # 领域包，原样保留（纯函数，时间由调用方传入）
 ├── api/
@@ -153,7 +153,7 @@ tenant drop  -tenant dlpv1
 
 ## 7. 构建、运行与预览契约
 
-- **镜像**：`Dockerfile` 三阶段：Node 构建前端 → Go 构建 `server` 与 `tenant` → 运行镜像（非 root，只含两个二进制和 `web/dist`）。构建时 `BUILD_SHA` 作为参数传入。
+- **镜像**：`Dockerfile` 三阶段：Node 构建前端 → Go 构建 `server`、`tenant`、`devseed` → 运行镜像（distroless、非 root，只含三个二进制、`web/dist`（`/app/web`）和 Golden 快照（`/app/golden`））。三个命令都在 PATH 里，只设 `CMD ["server"]`，`docker run <镜像> tenant reset …` 直接调用租户命令。构建时 `BUILD_SHA` 作为参数传入。
 - **配置**（环境变量）：`DATABASE_URL`、`ADDR`（默认 `:8080`）、`WEB_DIR`、`BUILD_SHA`、`COOKIE_SECURE`、`TENANT_TEST_PASSWORD`（只给 `tenant` 用）。
 - **服务启动时**跑 public 迁移；租户迁移由 `tenant seed/reset` 跑，服务启动时检查每个已登记租户的迁移版本，落后时拒绝该租户的请求并记日志（不自动迁移，避免多副本竞争）。
 - **平台的预览契约**（DP2-06 在平台侧实现）：
@@ -174,9 +174,9 @@ tenant drop  -tenant dlpv1
 
 ## 9. 测试、CI 与 AGENTS.md
 
-- **Go**：`gofmt`、`go vet`、`go test ./...`；需要数据库的测试用环境变量 `TEST_DATABASE_URL`，没有时跳过（CI 里有 Postgres 服务，一定会跑）。处理函数测试覆盖每个角色的允许和拒绝。
+- **Go**：`gofmt`、`go vet`、`go test`（范围一律是 `./api/... ./daily/...`：根目录的 `./...` 会扫到 `web/node_modules` 里的 Go 包）；需要数据库的测试用环境变量 `TEST_DATABASE_URL`，没有时跳过（CI 里有 Postgres 服务，一定会跑）。处理函数测试覆盖每个角色的允许和拒绝。
 - **前端**：`npm run lint`（含设计规则）、`npm run type-check`、`npm test`、`npm run build`。
-- **迁移检查**：在空库上 `up` 全部迁移，再对一个租户 `reset` 两次比较结果。
+- **迁移检查**：在空库上 `up` 全部迁移，再对一个租户 `reset` 两次比较结果（`.github/scripts/check-migrations.sh`）。
 - **E2E**：`e2e/` 下的 Playwright 测试，对 `docker compose` 起的服务跑：登录、台账、详情的冒烟用例。CI 里单独一个任务。
 - **镜像**：每个 PR 构建镜像；`dw/*` 分支的 PR 推送到 GHCR（tag `sha-<head>`）（对应 abby-pm 的 PM-03）。
 - **AGENTS.md** 写明：目录与命令；改动后必须跑的检查；表驱动测试；业务规则只放 `daily/`；时间由调用方传入；前端只用设计系统；不改受保护路径。
@@ -203,10 +203,10 @@ tenant drop  -tenant dlpv1
 
 平台侧新增独立项目 `dw-pilot-v2`，不改现有 `dw-pilot`，所以 DP2-06 可以在 OP-09 之前合入平台，不影响 MVP 验收；OP-09 通过后再把默认试点切过来。
 
-## 12. 待确认
+## 12. 已决定（2026-10-05，DP2-05）
 
-| # | 事项 | 建议 |
+| # | 事项 | 决定 |
 |---|---|---|
 | 1 | 仓库公开还是私有 | 公开（免费账号的私有仓库不能用规则集，与 `dw-pilot-dailylog` 相同）；仓库里只有虚构数据 |
-| 2 | 镜像仓库 | GHCR（GCP 未 apply 前）；GCP 就绪后改推 Artifact Registry |
+| 2 | 镜像仓库 | GHCR（`ghcr.io/<owner>/dw-pilot-v2:sha-<PR head>`，`dw/*` 分支的 PR 由 CI 推送）；GCP 就绪后改推 Artifact Registry |
 | 3 | 推到 GitHub 的时机 | DP2-05 完成后一次性推送并配置规则集；之前只在本地开发 |
