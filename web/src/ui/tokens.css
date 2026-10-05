@@ -1,0 +1,89 @@
+/*
+ * Design tokens for dw-pilot-v2 (docs/design.md §8).
+ *
+ * Every colour, radius and type size used by the app is declared here, once, as a CSS
+ * variable inside Tailwind v4's @theme. Tailwind turns each `--color-*` into the usual
+ * utilities (`bg-surface`, `text-muted`, `border-border` …), so business code never
+ * needs a raw palette class, a hex value or an arbitrary value — and ESLint
+ * (eslint-rules/design-system.mjs) refuses them outside src/ui.
+ *
+ * The default Tailwind palette is cleared (`--color-*: initial`) so `bg-red-500` does
+ * not compile to anything: the only colours that exist are the semantic ones below.
+ */
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+
+  /* Surfaces and text */
+  --color-canvas: #f4f5f2;          /* page background */
+  --color-surface: #ffffff;         /* panels, tables, dialogs */
+  --color-surface-muted: #eef0ec;   /* table header, filter bar */
+  --color-border: #d6dad3;
+  --color-border-strong: #a9b0a6;
+  --color-fg: #1c2420;              /* body text */
+  --color-muted: #5b655f;           /* secondary text; 5.9:1 on surface */
+  --color-overlay: rgb(28 36 32 / 0.45);
+
+  /* Interaction */
+  --color-primary: #1f5c45;         /* engineering green */
+  --color-primary-hover: #174836;
+  --color-primary-fg: #ffffff;
+  --color-focus: #2f7d5f;
+
+  /* Feedback */
+  --color-danger: #b42318;
+  --color-danger-hover: #912018;
+  --color-danger-soft: #fdecea;
+  --color-danger-fg: #8a1c13;
+  --color-warning-soft: #fff4dc;
+  --color-warning-fg: #7a4b00;
+  --color-success-soft: #e5f4ec;
+  --color-success-fg: #17583c;
+  --color-info-soft: #e6eff8;
+  --color-info-fg: #1d4f7c;
+
+  /*
+   * Report states (daily.StatusDraft / StatusSubmitted / StatusLocked, plus 迟交).
+   * Each state has a soft background, a foreground for its text, and a solid mark
+   * used for the leading glyph. Colour is never the only signal: Badge always
+   * carries the state's text as well.
+   */
+  --color-status-draft: #6b7280;
+  --color-status-draft-soft: #f0f1f3;
+  --color-status-draft-fg: #374151;
+  --color-status-submitted: #1f7a52;
+  --color-status-submitted-soft: #e3f3ea;
+  --color-status-submitted-fg: #145236;
+  --color-status-locked: #3b4f7a;
+  --color-status-locked-soft: #e7ebf4;
+  --color-status-locked-fg: #26375c;
+  --color-status-late: #c27803;
+  --color-status-late-soft: #fff3d6;
+  --color-status-late-fg: #7a4b00;
+
+  /* Spacing: Tailwind's 4px ramp (p-1 = 4px, p-4 = 16px). */
+  --spacing: 0.25rem;
+
+  /* Radii */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-full: 9999px;
+
+  /* Type scale */
+  --font-sans: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.875rem;
+
+  /* Shadows: only floating layers (dialog) get one. */
+  --shadow-overlay: 0 12px 32px rgb(28 36 32 / 0.18);
+}

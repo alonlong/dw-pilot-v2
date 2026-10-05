@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "name": "golden@v1",
+  "description": "全部虚构的数据：工地、地址、人名、日报都是编造的，不来自任何租户。3 个工地、2026-09-01 至 09-10 每天一份日报，覆盖未提交、按时提交、迟交 1～3 天、已锁定、有备注、无工时。修改 tables/ 后用 go test ./api/internal/tenant -run TestGoldenManifest -update 更新行数和 sha256。",
+  "tenant_migration": 1,
+  "tables": [
+    {
+      "name": "job",
+      "file": "tables/job.jsonl",
+      "rows": 3,
+      "sha256": "8d96f090367a12704ebb032eb474ee8b036ba118718b37c8d740a3762d52991b"
+    },
+    {
+      "name": "report",
+      "file": "tables/report.jsonl",
+      "rows": 30,
+      "sha256": "f8fee846f84ecde987ab256bbeeed7876f3c2d50d18c87ff7c412cb50ee2fbea"
+    },
+    {
+      "name": "crew_hours",
+      "file": "tables/crew_hours.jsonl",
+      "rows": 91,
+      "sha256": "9355df8479ddf25a676855b1f96c2f6921c0269cc8a8f528e1a6a737a1e34267"
+    },
+    {
+      "name": "report_note",
+      "file": "tables/report_note.jsonl",
+      "rows": 10,
+      "sha256": "0aeb01e2b2b08ed67fe28a3377bfcd0b3d0a26f928c2664f2dcb1eae6fc674a2"
+    }
+  ]
+}
