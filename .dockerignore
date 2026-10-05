@@ -1,0 +1,14 @@
+# 构建上下文只需要 go.mod/go.sum、daily/、api/、web/（源码）和 Golden 快照。
+.git
+.github
+.dw
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+bin
+e2e
+docs
+**/.DS_Store
+*.log
+docker-compose.yml
+Dockerfile

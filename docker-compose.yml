@@ -1,0 +1,52 @@
+# 本地开发与 CI 的 E2E：postgres + app。
+#
+#   docker compose up --build
+#
+# 打开 http://localhost:8080，用 field@dev.test（或 admin/manager/finance@dev.test）登录，
+# 密码是 TENANT_TEST_PASSWORD，默认 pilot-pass（只用于本地）。
+# 每次 up 时 init 用 devseed -reset 按 Golden 快照重建 dev 租户，之前在 dev 里的改动会丢掉。
+# 8080 被占用时：APP_PORT=18080 docker compose up --build。
+
+name: dw-pilot-v2
+
+x-app: &app
+  build:
+    context: .
+    args:
+      BUILD_SHA: ${BUILD_SHA:-dev}
+  image: dw-pilot-v2:dev
+  environment: &app-env
+    DATABASE_URL: postgres://dl:dl@postgres:5432/dailylog?sslmode=disable
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dl
+      POSTGRES_PASSWORD: dl
+      POSTGRES_DB: dailylog
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dl -d dailylog"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # 一次性：建立本地开发租户 dev（Golden 快照 + 四个测试账号），完成后退出。
+  init:
+    <<: *app
+    command: ["devseed", "-reset", "-snapshot", "/app/golden"]
+    environment:
+      <<: *app-env
+      TENANT_TEST_PASSWORD: ${TENANT_TEST_PASSWORD:-pilot-pass}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    <<: *app
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      init:
+        condition: service_completed_successfully
