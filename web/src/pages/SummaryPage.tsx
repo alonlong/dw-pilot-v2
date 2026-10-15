@@ -82,7 +82,7 @@ function Summary() {
         <LoadError title="汇总加载失败" error={summary.error} onRetry={() => void summary.refetch()} />
       ) : summary.data.length === 0 ? (
         <EmptyState
-          title={filtered ? '这个日期范围内没有可汇总的日报' : '还没有可汇总的日报'}
+          title={filtered ? '所选日期范围内没有已提交的日报' : '还没有可汇总的日报'}
           description="只有已提交或迟交的日报会计入汇总。"
         />
       ) : (
