@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import type { Role, SummaryRow } from '@/api'
 import { apiError, meAs, mockApi, renderApp } from '@/test/utils'
 
@@ -34,6 +34,14 @@ describe('SummaryPage', () => {
     mockApi(routes('admin', []))
     renderApp('/summary')
     expect(await screen.findByText('还没有可汇总的日报')).toBeInTheDocument()
+  })
+
+  test('AC-1 shows the range empty message without a table', async () => {
+    const { calls } = mockApi(routes('manager', []))
+    renderApp('/summary?from=2030-01-01&to=2030-01-02')
+    expect(await screen.findByText('所选日期范围内没有已提交的日报')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(calls.find((c) => c.path === '/api/summary')?.search).toBe('?from=2030-01-01&to=2030-01-02')
   })
 
   it('shows the error state', async () => {
