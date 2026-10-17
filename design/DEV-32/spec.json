@@ -1,0 +1,37 @@
+{
+  "form": "code_prototype",
+  "summary": "在现有登录页上增加“账号已临时锁定”提示：服务端返回 423 时用 warning 提示说明锁定原因和 15 分钟后再试，普通密码错误仍沿用原有的 danger 提示，且不显示剩余尝试次数。",
+  "deliverables": ["flow", "screens", "states", "prototype"],
+  "screens": [
+    {
+      "id": "S1",
+      "name": "登录页（锁定前：密码错误）",
+      "scenario": 1,
+      "acRefs": ["AC-1", "AC-2"],
+      "change": "modified",
+      "states": ["normal", "loading", "error"],
+      "notApplicable": {
+        "empty": "登录表单没有列表或数据内容，不存在空状态",
+        "noPermission": "登录页对未登录用户公开，不涉及角色权限",
+        "large": "表单只有两个固定字段，不涉及大数据量"
+      },
+      "route": "/login"
+    },
+    {
+      "id": "S2",
+      "name": "登录页（账号已临时锁定，接口返回 423）",
+      "scenario": 1,
+      "acRefs": ["AC-1"],
+      "change": "modified",
+      "states": ["normal", "error"],
+      "notApplicable": {
+        "empty": "登录表单没有列表或数据内容，不存在空状态",
+        "loading": "与 S1 共用同一按钮内加载状态，见 S1 loading",
+        "noPermission": "登录页对未登录用户公开，不涉及角色权限",
+        "large": "表单只有两个固定字段，不涉及大数据量"
+      },
+      "route": "/login"
+    }
+  ],
+  "newComponents": []
+}
