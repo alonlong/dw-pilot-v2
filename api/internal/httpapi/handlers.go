@@ -51,6 +51,7 @@ type reportRowJSON struct {
 	Status       string  `json:"status"`
 	TotalHours   float64 `json:"totalHours"`
 	DaysLate     int     `json:"daysLate"`
+	NoteCount    int     `json:"noteCount"`
 }
 
 type crewEntryJSON struct {
@@ -320,6 +321,7 @@ func (s *server) listReports(c echo.Context) error {
 			Status:       row.Status,
 			TotalHours:   row.TotalHours,
 			DaysLate:     row.DaysLate,
+			NoteCount:    rec.NoteCount,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"rows": out})

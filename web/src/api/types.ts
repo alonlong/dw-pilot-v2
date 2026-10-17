@@ -29,6 +29,8 @@ export interface ReportRow {
   status: Status
   totalHours: number
   daysLate: number
+  /** Number of notes; optional, added in REQ-50 */
+  noteCount?: number
 }
 
 export interface CrewEntry {

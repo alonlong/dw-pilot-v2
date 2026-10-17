@@ -1,13 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import type { ReportRow, Role } from '@/api'
 import { apiError, detail, jobs, meAs, mockApi, renderApp } from '@/test/utils'
 
 const rows: ReportRow[] = [
-  { id: 1, jobId: 'J-24001', jobName: '滨江一号', businessDate: '2026-09-01', status: '已提交', totalHours: 24.5, daysLate: 0 },
-  { id: 2, jobId: 'J-24002', jobName: '北湖二期', businessDate: '2026-09-01', status: '已锁定', totalHours: 16, daysLate: 2 },
-  { id: 3, jobId: 'J-24001', jobName: '滨江一号', businessDate: '2026-09-02', status: '未提交', totalHours: 0, daysLate: 0 },
+  { id: 1, jobId: 'J-24001', jobName: '滨江一号', businessDate: '2026-09-01', status: '已提交', totalHours: 24.5, daysLate: 0, noteCount: 2 },
+  { id: 2, jobId: 'J-24002', jobName: '北湖二期', businessDate: '2026-09-01', status: '已锁定', totalHours: 16, daysLate: 2, noteCount: 0 },
+  { id: 3, jobId: 'J-24001', jobName: '滨江一号', businessDate: '2026-09-02', status: '未提交', totalHours: 0, daysLate: 0, noteCount: 1 },
 ]
 
 const routes = (role: Role, reportRows: ReportRow[] = rows) => ({
@@ -29,6 +29,28 @@ describe('ReportsPage', () => {
     expect(within(bodyRows[1]!).getByText('迟交 2 天')).toBeInTheDocument()
     expect(within(bodyRows[2]!).getByText('未提交')).toBeInTheDocument()
     expect(within(bodyRows[1]!).getByRole('link', { name: /北湖二期 2026-09-01/ })).toHaveAttribute('href', '/reports/2')
+  })
+
+  test('AC-2 shows the 备注 column with noteCount for each row', async () => {
+    // The last row omits noteCount, as an older server would.
+    const legacy: ReportRow = {
+      id: 3,
+      jobId: 'J-24001',
+      jobName: '滨江一号',
+      businessDate: '2026-09-02',
+      status: '未提交',
+      totalHours: 0,
+      daysLate: 0,
+    }
+    mockApi(routes('manager', [rows[0]!, rows[1]!, legacy]))
+    renderApp('/reports')
+    const table = await screen.findByRole('table', { name: /日报台账/ })
+    const [header, ...bodyRows] = within(table).getAllByRole('row')
+    const headers = within(header!).getAllByRole('columnheader')
+    const noteIndex = headers.findIndex((h) => h.textContent === '备注')
+    expect(noteIndex).toBeGreaterThanOrEqual(0)
+    const noteCell = (row: HTMLElement) => within(row).getAllByRole('cell')[noteIndex]
+    expect(bodyRows.map((r) => noteCell(r)?.textContent)).toEqual(['2', '0', '0'])
   })
 
   it('shows a loading state', async () => {
