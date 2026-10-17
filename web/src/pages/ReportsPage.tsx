@@ -117,6 +117,7 @@ export function ReportsPage() {
               <TableHeaderCell>状态</TableHeaderCell>
               <TableHeaderCell align="right">工时合计</TableHeaderCell>
               <TableHeaderCell>迟交天数</TableHeaderCell>
+              <TableHeaderCell align="right">备注</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -141,6 +142,9 @@ export function ReportsPage() {
                 <TableCell align="right">{formatHours(r.totalHours)}</TableCell>
                 <TableCell>
                   {r.daysLate > 0 ? <LateBadge daysLate={r.daysLate} /> : <span className="text-muted">0</span>}
+                </TableCell>
+                <TableCell align="right">
+                  {r.noteCount ? r.noteCount : <span className="text-muted">0</span>}
                 </TableCell>
               </TableRow>
             ))}

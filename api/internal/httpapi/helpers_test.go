@@ -183,4 +183,5 @@ type row struct {
 	Status       string  `json:"status"`
 	TotalHours   float64 `json:"totalHours"`
 	DaysLate     int     `json:"daysLate"`
+	NoteCount    int     `json:"noteCount"`
 }
