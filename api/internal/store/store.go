@@ -46,11 +46,13 @@ type Note struct {
 }
 
 // Record 是一份日报及其存储信息。Report.Notes 与 Notes 一一对应，按 id 升序。
+// NoteCount 是备注条数：Reports 只填计数（不填 Notes），Report 不填计数。
 type Record struct {
-	ID      int64
-	JobName string
-	Report  daily.Report
-	Notes   []Note
+	ID        int64
+	JobName   string
+	Report    daily.Report
+	Notes     []Note
+	NoteCount int
 }
 
 // Filter 是台账的筛选条件；零值表示不限。From、To 为闭区间的业务日期。
@@ -90,7 +92,7 @@ func (s *Store) Jobs(ctx context.Context) ([]Job, error) {
 	})
 }
 
-// Reports 返回符合条件的日报（含工时，不含备注），按 id 升序。
+// Reports 返回符合条件的日报（含工时和备注条数，不含备注正文），按 id 升序。
 func (s *Store) Reports(ctx context.Context, f Filter) ([]Record, error) {
 	where := "true"
 	var args []any
@@ -139,7 +141,25 @@ func (s *Store) Reports(ctx context.Context, f Filter) ([]Record, error) {
 		}
 		byID[id].Report.Crew[worker] = hours
 	}
-	return recs, crew.Err()
+	if err := crew.Err(); err != nil {
+		return nil, err
+	}
+	crew.Close()
+
+	// 没有备注的日报不出现在结果里，NoteCount 保持零值。
+	counts, err := s.q.Query(ctx, `select report_id, count(*) from report_note where report_id = any($1) group by report_id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer counts.Close()
+	for counts.Next() {
+		var id, n int64
+		if err := counts.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		byID[id].NoteCount = int(n)
+	}
+	return recs, counts.Err()
 }
 
 // Report 返回一份日报（含工时和备注）。forUpdate 为真时锁住该行直到事务结束，

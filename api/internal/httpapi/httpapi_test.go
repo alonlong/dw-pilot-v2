@@ -295,14 +295,14 @@ func TestListReports(t *testing.T) {
 		byID[r.ID] = r
 	}
 	want := []row{
-		{1, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-01", "已锁定", 33.5, 0},
-		{3, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-03", "已提交", 33.5, 1},
-		{5, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-05", "已提交", 33.5, 0},
-		{10, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-10", "未提交", 0, 0},
-		{12, "J-24002", "青石社区卫生站（虚构）", "2026-09-02", "已提交", 25.5, 2},
-		{15, "J-24002", "青石社区卫生站（虚构）", "2026-09-05", "已提交", 25.5, 1},
-		{22, "J-24003", "北岸物流仓库（虚构）", "2026-09-02", "已锁定", 41.5, 1},
-		{24, "J-24003", "北岸物流仓库（虚构）", "2026-09-04", "已提交", 41.5, 3},
+		{1, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-01", "已锁定", 33.5, 0, 2},
+		{3, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-03", "已提交", 33.5, 1, 1},
+		{5, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-05", "已提交", 33.5, 0, 0},
+		{10, "J-24001", "滨江示范小学扩建（虚构）", "2026-09-10", "未提交", 0, 0, 0},
+		{12, "J-24002", "青石社区卫生站（虚构）", "2026-09-02", "已提交", 25.5, 2, 1},
+		{15, "J-24002", "青石社区卫生站（虚构）", "2026-09-05", "已提交", 25.5, 1, 0},
+		{22, "J-24003", "北岸物流仓库（虚构）", "2026-09-02", "已锁定", 41.5, 1, 2},
+		{24, "J-24003", "北岸物流仓库（虚构）", "2026-09-04", "已提交", 41.5, 3, 1},
 	}
 	for _, w := range want {
 		if got := byID[w.ID]; got != w {
@@ -343,6 +343,62 @@ func TestListReports(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestListReports_AC1 检查台账每行的 noteCount 与快照 report_note 按 report_id 的计数一致。
+func TestListReports_AC1(t *testing.T) {
+	pool := testdb.Pool(t)
+	testdb.Seed(t, slotA)
+	v := newEnv(t, pool)
+	cks := v.loginAll(slotA)
+	// 快照 report_note：1、7、22 各 2 条，3、12、17、24 各 1 条，其余 0 条。
+	wantCount := map[int64]int{1: 2, 3: 1, 7: 2, 12: 1, 17: 1, 22: 2, 24: 1}
+
+	list := func(t *testing.T, ck *http.Cookie) map[int64]row {
+		t.Helper()
+		rec := v.do("GET", "/api/reports", nil, ck)
+		if rec.Code != 200 {
+			t.Fatalf("= %d %s", rec.Code, rec.Body)
+		}
+		if !strings.Contains(rec.Body.String(), `"noteCount":0`) {
+			t.Errorf("noteCount 为 0 时也要输出：%s", rec.Body)
+		}
+		out := map[int64]row{}
+		for _, r := range decodeJSON[struct {
+			Rows []row `json:"rows"`
+		}](t, rec).Rows {
+			out[r.ID] = r
+		}
+		return out
+	}
+
+	for _, role := range []string{"field", "manager", "finance"} {
+		t.Run(role, func(t *testing.T) {
+			rows := list(t, cks[role])
+			if len(rows) != 30 {
+				t.Fatalf("行数 = %d, want 30", len(rows))
+			}
+			for id, r := range rows {
+				if r.NoteCount != wantCount[id] {
+					t.Errorf("row %d noteCount = %d, want %d", id, r.NoteCount, wantCount[id])
+				}
+			}
+		})
+	}
+
+	t.Run("追加备注后加 1", func(t *testing.T) {
+		rec := v.do("POST", "/api/reports/2/notes", map[string]string{"body": "补一条备注"}, cks["manager"])
+		if rec.Code != 201 {
+			t.Fatalf("= %d %s", rec.Code, rec.Body)
+		}
+		rows := list(t, cks["finance"])
+		if got := rows[2].NoteCount; got != 1 {
+			t.Errorf("row 2 noteCount = %d, want 1", got)
+		}
+		if got := rows[1].NoteCount; got != 2 {
+			t.Errorf("row 1 noteCount = %d, want 2（其他行不变）", got)
+		}
+	})
 }
 
 func TestJobsAndSummary(t *testing.T) {

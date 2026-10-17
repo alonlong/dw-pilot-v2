@@ -104,6 +104,53 @@ func TestReportsFilter(t *testing.T) {
 	}
 }
 
+// TestReportsNoteCount_AC1 检查台账查询带回每份日报的备注条数（与快照 report_note 计数一致）。
+func TestReportsNoteCount_AC1(t *testing.T) {
+	pool := setup(t)
+	var byID map[int64]store.Record
+	inTx(t, pool, func(ctx context.Context, st *store.Store) error {
+		recs, err := st.Reports(ctx, store.Filter{})
+		if err != nil {
+			return err
+		}
+		byID = make(map[int64]store.Record, len(recs))
+		for _, r := range recs {
+			byID[r.ID] = r
+		}
+		return nil
+	})
+	tests := []struct {
+		name string
+		id   int64
+		want int
+	}{
+		{"两条备注", 1, 2},
+		{"一条备注", 3, 1},
+		{"两条备注（07）", 7, 2},
+		{"一条备注（12）", 12, 1},
+		{"一条备注（17）", 17, 1},
+		{"两条备注（22）", 22, 2},
+		{"一条备注（24）", 24, 1},
+		{"无备注（2）", 2, 0},
+		{"无备注（10）", 10, 0},
+		{"无备注（15）", 15, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec, ok := byID[tt.id]
+			if !ok {
+				t.Fatalf("没有日报 %d", tt.id)
+			}
+			if rec.NoteCount != tt.want {
+				t.Errorf("NoteCount = %d, want %d", rec.NoteCount, tt.want)
+			}
+			if rec.Notes != nil {
+				t.Errorf("Reports 不应带备注正文：%v", rec.Notes)
+			}
+		})
+	}
+}
+
 func TestReportRoundTrip(t *testing.T) {
 	pool := setup(t)
 	// id 与 Golden 快照对应：1 = J-24001 09-01（已锁定、2 条备注），15 = J-24002 09-05
@@ -203,6 +250,9 @@ func TestCreateAndSave(t *testing.T) {
 			t.Fatalf("recs = %v, err = %v", recs, err)
 		}
 		id = recs[0].ID
+		if recs[0].NoteCount != 0 {
+			t.Errorf("新建日报的 NoteCount = %d, want 0", recs[0].NoteCount)
+		}
 		if err := st.SaveCrew(ctx, id, map[string]float64{"甲": 8, "乙": 4}); err != nil {
 			return err
 		}
@@ -240,6 +290,13 @@ func TestCreateAndSave(t *testing.T) {
 		}
 		if got := r.LatestNotes(2); len(got) != 2 || got[0] != "第二条" {
 			t.Errorf("LatestNotes = %v", got)
+		}
+		recs, err := st.Reports(ctx, store.Filter{From: date("2026-09-11")})
+		if err != nil {
+			return err
+		}
+		if len(recs) != 1 || recs[0].NoteCount != 2 {
+			t.Errorf("AddNote 两次后 recs = %+v, want NoteCount 2", recs)
 		}
 		return nil
 	})
