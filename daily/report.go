@@ -4,6 +4,8 @@ package daily
 import (
 	"errors"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -113,13 +115,23 @@ func (r *Report) LatestNotes(n int) []string {
 	return out
 }
 
-// TotalHours 返回全部工人的工时合计。
+// TotalHours 返回全部工人的工时合计：按工人姓名排序后累加，结果四舍五入到 0.01 小时。
 func (r *Report) TotalHours() float64 {
-	var sum float64
-	for _, h := range r.Crew {
-		sum += h
+	names := make([]string, 0, len(r.Crew))
+	for name := range r.Crew {
+		names = append(names, name)
 	}
-	return sum
+	sort.Strings(names)
+	var sum float64
+	for _, name := range names {
+		sum += r.Crew[name]
+	}
+	return roundHours(sum)
+}
+
+// roundHours 把工时四舍五入到 0.01 小时，消除浮点累加的尾差。
+func roundHours(h float64) float64 {
+	return math.Round(h*100) / 100
 }
 
 // IsLate 报告日报是否迟交：在业务日期当天结束之后提交即视为迟交。
