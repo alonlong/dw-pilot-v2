@@ -93,3 +93,75 @@ func TestHoursByJob(t *testing.T) {
 		})
 	}
 }
+
+func TestTotalHours_AC1(t *testing.T) {
+	tests := []struct {
+		name string
+		crew map[string]float64
+		want float64
+	}{
+		{"0.1 加 0.2 没有尾差", map[string]float64{"张三": 0.1, "李四": 0.2}, 0.3},
+		{"整数工时", map[string]float64{"甲": 8, "乙": 6}, 14},
+		{"空 Crew 为 0", map[string]float64{}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := NewReport("J1", day(10, 1, 0))
+			if err := r.Update(tt.crew); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.TotalHours(); got != tt.want {
+				t.Errorf("TotalHours() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTotalHours_AC2(t *testing.T) {
+	r := NewReport("J1", day(10, 1, 0))
+	if err := r.Update(map[string]float64{"张三": 0.1, "李四": 0.2, "王五": 0.3}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1000; i++ {
+		if got := r.TotalHours(); got != 0.6 {
+			t.Fatalf("第 %d 次 TotalHours() = %v, want 0.6", i+1, got)
+		}
+	}
+}
+
+func TestHoursByJob_AC3(t *testing.T) {
+	mk := func(d int, hours float64, submit, lock bool) Report {
+		r := NewReport("A", day(10, d, 0))
+		if err := r.Update(map[string]float64{"w": hours}); err != nil {
+			t.Fatal(err)
+		}
+		if submit {
+			if err := r.Submit(day(10, d, 17)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if lock {
+			r.Lock()
+		}
+		return *r
+	}
+
+	tests := []struct {
+		name    string
+		reports []Report
+	}{
+		{"两份已提交", []Report{mk(1, 0.1, true, false), mk(2, 0.2, true, false)}},
+		{"已提交与已锁定未提交", []Report{mk(1, 0.1, true, false), mk(2, 0.2, false, true)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HoursByJob(tt.reports)
+			if len(got) != 1 {
+				t.Fatalf("got %v, want 1 job", got)
+			}
+			if got["A"] != 0.3 {
+				t.Errorf("got[A] = %v, want 0.3", got["A"])
+			}
+		})
+	}
+}

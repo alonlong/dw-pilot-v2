@@ -26,7 +26,7 @@ type Row struct {
 }
 
 // HoursByJob 按工地汇总已提交（含已锁定）日报的总工时，未提交的日报不计入。
-// 没有符合条件的日报时返回空映射而不是 nil。
+// 每个工地的合计四舍五入到 0.01 小时。没有符合条件的日报时返回空映射而不是 nil。
 func HoursByJob(reports []Report) map[string]float64 {
 	out := map[string]float64{}
 	for i := range reports {
@@ -34,6 +34,9 @@ func HoursByJob(reports []Report) map[string]float64 {
 		if r.Submitted() || r.Locked {
 			out[r.JobID] += r.TotalHours()
 		}
+	}
+	for job := range out {
+		out[job] = roundHours(out[job])
 	}
 	return out
 }
