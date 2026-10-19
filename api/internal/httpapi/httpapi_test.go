@@ -594,6 +594,57 @@ func TestReportFlow(t *testing.T) {
 	})
 }
 
+// TestAddNote_AC3 检查追加备注的接口保存去掉首尾空白后的正文（去空白在 daily 的 AppendNote 里）。
+func TestAddNote_AC3(t *testing.T) {
+	pool := testdb.Pool(t)
+	testdb.Seed(t, slotA)
+	v := newEnv(t, pool)
+	cks := v.loginAll(slotA)
+	full := strings.Repeat("字", 500)
+	// 各用例用快照里没有备注的不同日报，notes[0] 就是这次追加的备注。
+	tests := []struct {
+		name       string
+		role       string
+		id         int
+		body       string
+		wantStatus int
+		want       string
+	}{
+		{"field 首尾带空格", "field", 6, "  钢筋到场  ", 201, "钢筋到场"},
+		{"field 500 字加末尾换行", "field", 8, full + "\n", 201, full},
+		{"admin 首尾带空格", "admin", 9, "  钢筋到场  ", 201, "钢筋到场"},
+		{"manager 首尾带换行", "manager", 10, "\n钢筋到场\n", 201, "钢筋到场"},
+		{"finance 拒绝", "finance", 11, "  钢筋到场  ", 403, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := fmt.Sprintf("/api/reports/%d", tt.id)
+			rec := v.do("POST", path+"/notes", map[string]string{"body": tt.body}, cks[tt.role])
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("= %d, want %d：%s", rec.Code, tt.wantStatus, rec.Body)
+			}
+			if tt.wantStatus != 201 {
+				if got := errCode(t, rec); got != "forbidden" {
+					t.Errorf("code = %q, want forbidden", got)
+				}
+				rec = v.do("GET", path, nil, cks["admin"])
+				if d := decodeJSON[detail](t, rec); len(d.Notes) != 0 {
+					t.Errorf("被拒绝的请求留下了备注：%+v", d.Notes)
+				}
+				return
+			}
+			if d := decodeJSON[detail](t, rec); len(d.Notes) != 1 || d.Notes[0].Body != tt.want {
+				t.Fatalf("响应 notes = %+v, want body %q", d.Notes, tt.want)
+			}
+			// 再读一次，确认落库的也是去掉空白后的正文。
+			rec = v.do("GET", path, nil, cks[tt.role])
+			if d := decodeJSON[detail](t, rec); len(d.Notes) != 1 || d.Notes[0].Body != tt.want {
+				t.Errorf("落库 notes = %+v, want body %q", d.Notes, tt.want)
+			}
+		})
+	}
+}
+
 // TestTenantIsolation：一个租户的用户读不到、改不了另一个租户的日报。
 func TestTenantIsolation(t *testing.T) {
 	pool := testdb.Pool(t)
