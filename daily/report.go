@@ -86,10 +86,12 @@ func (r *Report) Update(crew map[string]float64) error {
 	return nil
 }
 
-// AppendNote 在日报末尾追加一条备注；空白备注返回 ErrEmptyNote，
-// 超过 MaxNoteRunes 个字符（rune）返回 ErrNoteTooLong。
+// AppendNote 在日报末尾追加一条备注。先去掉首尾空白再校验：空白备注返回 ErrEmptyNote，
+// 超过 MaxNoteRunes 个字符（rune）返回 ErrNoteTooLong；追加的是去掉首尾空白后的正文，
+// 正文中间的空白和换行不处理。
 func (r *Report) AppendNote(note string) error {
-	if strings.TrimSpace(note) == "" {
+	note = strings.TrimSpace(note)
+	if note == "" {
 		return ErrEmptyNote
 	}
 	if utf8.RuneCountInString(note) > MaxNoteRunes {

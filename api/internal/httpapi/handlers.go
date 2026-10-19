@@ -479,11 +479,13 @@ func (s *server) addNote(c echo.Context) error {
 	}
 	u := currentUser(c)
 	return s.modify(c, http.StatusCreated, func(ctx context.Context, st *store.Store, rec *store.Record) error {
-		// 锁定不影响追加备注；校验在 daily 的 AppendNote 里。
+		// 锁定不影响追加备注；去掉首尾空白和校验都在 daily 的 AppendNote 里。
 		if err := rec.Report.AppendNote(in.Body); err != nil {
 			return dailyError(err)
 		}
-		return st.AddNote(ctx, rec.ID, in.Body, u.ID, u.Name, s.Now())
+		// 保存 AppendNote 追加的正文（已去掉首尾空白），不用原始的 in.Body。
+		body := rec.Report.Notes[len(rec.Report.Notes)-1]
+		return st.AddNote(ctx, rec.ID, body, u.ID, u.Name, s.Now())
 	})
 }
 
