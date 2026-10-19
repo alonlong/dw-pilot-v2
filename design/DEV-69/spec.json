@@ -1,0 +1,25 @@
+{
+  "form": "code_prototype",
+  "summary": "formatHours 固定保留一位小数并保留千分位（64→64.0、1280→1,280.0、7.25→7.3），汇总页「总工时（小时）」列右对齐后小数点对齐；版式、组件和其余状态不变。",
+  "deliverables": ["flow", "screens", "states", "prototype"],
+  "screens": [
+    {
+      "id": "S1",
+      "name": "工时汇总页（总工时列统一一位小数）",
+      "scenario": 1,
+      "acRefs": ["AC-1"],
+      "change": "modified",
+      "states": ["normal", "empty", "loading", "error", "noPermission"],
+      "notApplicable": {
+        "large": "汇总按工地一行，工地数量有限，与现有表格相同；大数值的千分位显示已在 normal 示例数据（1,280.0）中覆盖。"
+      },
+      "route": "/summary",
+      "role": "finance",
+      "deniedRole": "field",
+      "stateRoutes": {
+        "empty": "/summary?from=2000-01-01&to=2000-01-01"
+      }
+    }
+  ],
+  "newComponents": []
+}
